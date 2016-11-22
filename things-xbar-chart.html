@@ -1,0 +1,329 @@
+<link rel="import" href="../../../bower_components/polymer/polymer.html">
+
+<link rel="import" href="../../../bower_components/chart-elements/chart-elements.html">
+<link rel="import" href="../../../bower_components/things-section/things-scene-section.html">
+
+<link href="./lib/c3.css" rel="stylesheet" type="text/css">
+
+<!--
+	SPC Control X-Bar Chart 화면 
+-->
+
+<dom-module id="things-xbar-chart">
+	<template>
+		<style>
+			:host {
+				display: block;
+				@apply(--layout-vertical);
+				@apply(--layout-flex);
+			}
+			.chart-container {
+				@apply(--layout-flex);
+			}
+		</style>
+
+		<div id="x-bar-legend">
+			<table border=0 cellpading=0 cellspacing=0>
+				<tr>
+					<th>&nbsp;X-Bar&nbsp;&nbsp;&nbsp;
+						<td>&nbsp;USL&nbsp;<input id="x-bar-usl" type="text" readonly></td>
+						<td>&nbsp;LSL&nbsp;<input id="x-bar-lsl" type="text" readonly></td>
+						<td>&nbsp;CL&nbsp;<input id="x-bar-cl" type="text" readonly></td>
+						<td>&nbsp;CP&nbsp;<input id="x-bar-cp" type="text" readonly></td>
+						<td>&nbsp;CPK&nbsp;<input id="x-bar-cpk" type="text" readonly></td>
+					</th>
+				</tr>
+			</table>
+		</div>
+
+		<div id="x-bar" class="chart-container"></div>
+	</template>
+
+	<script src="./lib/d3.v3.js" charset="utf-8"></script>
+	<script src="./lib/c3.js" charset="utf-8"></script>
+
+	<script>
+		Polymer({
+			is: 'things-xbar-chart',
+
+			properties: {
+				/**
+				 * SPC Row Data
+				 */
+				items: {
+					type: Array
+				},
+
+				/**
+				 * Legend
+				 */
+				legend: {
+					type: Array,
+					value: [ {
+						key : 'Normality', color : '#0000FF'
+					},{
+						// 4개의 점의 상승/하락반복
+						key : 'Up and Down 4 Points', color : '#00FF00'
+					}, {
+						// 6개가 연속으로 상승혹은하락
+						key : 'Continous Up or Down 6 Points', color : '#FFFF00'
+					}, {
+						// 9개가 중심점보다 위또는아래
+						key : 'Above or Below Centerline 9 Points', color : '#F4A460'
+					}, {
+						// UCL/LCL범위벗어남
+						key : 'Out of UCL/LCL', color : '#FF0000'
+					} ]
+				},
+
+				/**
+				 * X-Bar Chart
+				 */
+				chart: {
+					type: Object,
+					value: function() {
+						var me = this;
+						return {
+							bindto: '#x-bar',
+							padding: {
+								top: 25,
+								right: 15,
+								bottom: 10,
+								left: 40,
+							},
+							data: {
+								x: 'x',
+								json: [],
+								keys: {
+									x: 'seq',
+									value: ['xbar', 'xusl', 'xcl', 'xlsl']
+								},
+								types: {
+									xbar: 'line',
+									xusl: 'step',
+									xcl: 'step',
+									xlsl: 'step'
+								},
+								colors: {
+									xbar: '#1f77b4',
+									xusl: 'red',
+									xcl: 'green',
+									xlsl: 'red'
+								},
+								color: function(color, d) {
+									if(d.id && d.id == 'xbar' && !d.id_org && (d.value || d.value == 0)) {
+										return me.decidePointColor(d.index);
+									} else {
+										return color;
+									}
+								}
+							},
+							grid: {
+								x: { show: true },
+								y: { show: true }
+							},
+							axis: {
+								x: {
+									type: 'category'
+								}
+							},
+							point: {
+								r: 5
+							}
+						}
+					}
+				}
+			},
+
+			observers: [
+				'_itemsChanged(items)'
+			],
+
+			/**
+			 * Ready To Render Chart
+			 */
+			readyChart: function() {
+				this.$['x-bar-usl'].value = '';
+				this.$['x-bar-lsl'].value = '';
+				this.$['x-bar-cl'].value = '';
+				this.$['x-bar-cp'].value = '';
+				this.$['x-bar-cpk'].value = '';
+			},
+
+			/**
+			 * Items 변경시 ...
+			 */
+			_itemsChanged: function(items) {
+				if(!items || items.length > 0) {
+					this.readyChart();
+					this.calculateXbarMeta();
+					this.renderChart();
+				}
+			},
+
+			/**
+			 * USL, LSL, CL, CP, CPK 등 메타 데이터를 계산 
+			 */
+			calculateXbarMeta: function() {
+				var itemCount = this.items.length;
+				var standar = this.standardDeviation(this.items, 0);
+				var meanVal = this.mean(this.items);
+				var xusl = this.items[itemCount - 1].xusl;
+				var xlsl = this.items[itemCount - 1].xlsl;
+				var xcl = this.items[itemCount - 1].xcl;
+				var cp = (xusl - xlsl) / (6 * standar);
+				var cpk = (xusl - meanVal) / (3 * standar);
+
+				this.$['x-bar-usl'].value = xusl;
+				this.$['x-bar-lsl'].value = xlsl;
+				this.$['x-bar-cl'].value = xcl;
+				this.$['x-bar-cp'].value = this.roundXL(cp, 3);
+				this.$['x-bar-cpk'].value = this.roundXL(cpk, 3);
+			},
+
+			/**
+			 * Point Color를 데이터로 부터 결정하여 리턴 ...
+			 */
+			decidePointColor: function(index) {
+				var items = this.items;
+				var item = items[index];
+				
+				// 0. 값이 없거나 0인 경우 
+				if(!item.xbar || item.xbar == 0) {
+					return 'gray';
+				}
+
+				// 1. USL, LSL를 벗어난 경우 - 1 (빨강)
+				if(!item.xbar || item.xusl < item.xbar || item.xlsl > item.xbar) {
+					return 'red';
+				}
+				
+				if(index > 7) {
+					var checkCount = 0;
+					for(var i = index - 8; i < index; i++) {
+						if(items[i].xbar > items[i].xcl) {
+							checkCount++;
+						} else {
+							checkCount--;
+						}
+					}
+
+					if(item.xbar > item.xcl) {
+						// 2. 9개가 중심점보다 위 인 경우 -2 (주황색, #F4A460)
+						if(checkCount == 8) {
+							return '#F4A460';
+						}
+					} else if(item.xbar < item.xcl) {
+						// 2. 9개가 중심점보다 아래 인 경우 -2 (주황색, #F4A460)
+						if(checkCount == -8) {
+							return '#F4A460';
+						}
+					}
+				}
+				
+				/*if(index > 4) {
+					// 1이면 상승을 검사하고, -1이면 하락을 검사한다. 0이면 검사를 안한다.
+					var updownCheck = 1;
+
+					if(item.xbar > items[index - 1].xbar) {
+						updownCheck = 1;
+					} else if(item.xbar < items[index - 1].xbar) {
+						updownCheck = -1;
+					} else {
+						updownCheck = 0;
+					}
+
+					if(updownCheck == 1) {
+						for(var i = 0; i < index; i++) {
+							if(items[i].xbar >= items[i + 1].xbar) break;
+
+							// 3. 6개가 위로 상승 경우 (노란색, #FFFF00)
+							if(i == (index - 1)) return '#FFFF00';
+						}
+					} else if(updownCheck == -1) {
+						for(var i = 0; i < index; i++) {
+							if(items[i].xbar <= items[i + 1].xbar) break;
+
+							// 3. 6개가 위로 하락 경우 (노란색, #FFFF00)
+							if(i == (index - 1)) return '#FFFF00';
+						}
+					} else {
+						// 검사 안 함.
+					}
+				}
+				
+				if(index > 2) {
+					var d = items[index];
+					var c = items[index - 1];
+					var b = items[index - 2];
+					var a = items[index - 3];
+
+					// 4. 4개의 점의 상승/하락 반복한 경우 -4 (초록색, #00FF00)
+					if(a.xbar > b.xbar && b.xbar < c.xbar && c.xbar > d.xbar) {
+						return '#00FF00'; 
+					}
+					
+					// 4. 4개의 점의 하락/상승 반복한 경우 -4 (초록색, #00FF00)
+					if(a.xbar < b.xbar && b.xbar > c.xbar && c.xbar < d.xbar) {
+						return '#00FF00';
+					}
+				}*/
+
+				// default - 0 (#0000FF)
+				return '#0000FF';
+			},
+
+			/**
+			 * Chart Rendering
+			 */
+			renderChart: function() {
+				this.chart.data.json = this.items;
+				c3.generate(this.chart);
+			},
+
+			/**
+			 * 표준 편차 
+			 * option: 1이면 표본의 표준 편차, 
+			 * option: 0이면 모집단 전체의 표준 편차
+			 */
+			standardDeviation: function(array, option) { 
+				if (array.length < 2) return '';
+
+				var sum = 0, sd = 0, diff = 0;
+				var meanValue = this.mean(array);
+				
+				for(var i = 0; i < array.length; i++) {
+					diff = array[i].xbar - meanValue;
+					sum += diff * diff;
+				}
+
+				return Math.sqrt(sum / (array.length - option));
+			},
+
+			/**
+			 * 평균값 
+			 */
+			mean: function(array) {
+				var sum = 0;
+				for(var i = 0; i < array.length; i++) {
+					sum += array[i].xbar;
+				}
+
+				return sum / array.length;
+			},
+
+			/**
+			 * Round
+			 */
+			roundXL: function(n, digits) {
+				// 소수부 반올림
+				if (digits >= 0) return parseFloat(n.toFixed(digits));
+
+				// 정수부 반올림
+				digits = Math.pow(10, digits);
+				var t = Math.round(n * digits) / digits;
+				return parseFloat(t.toFixed(0));
+			}
+		});
+	</script>
+</dom-module>
