@@ -1,10 +1,10 @@
 {
   "name": "things-d3-chart",
-  "version": "0.1.4",
+  "version": "2.0.1",
   "authors": [
     "Hatio Lab. <heartyoh@hatiolab.com>"
   ],
-  "description": "things-d3-chart.",
+  "description": "복잡한 Chart구성하는 Lib",
   "keywords": [
     "web-component",
     "polymer",
@@ -19,7 +19,7 @@
   ],
   "dependencies": {
     "polymer": "Polymer/polymer#^1.2.0",
-    "things-libraries": "ThingsElements/things-libraries#^0.1.2"
+    "things-libraries": "ThingsElements/things-libraries#^2.0.0"
   },
   "devDependencies": {
     "iron-component-page": "PolymerElements/iron-component-page#^1.0.0"
