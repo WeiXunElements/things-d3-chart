@@ -1,8 +1,8 @@
 {
   "name": "things-d3-chart",
-  "version": "v2.2.0",
+  "version": "v2.2.1",
   "authors": [
-    "Hatio Lab. <heartyoh@hatiolab.com>"
+    "Shenzhen Weixun"
   ],
   "description": "복잡한 Chart구성하는 Lib",
   "keywords": [
@@ -11,8 +11,6 @@
     "seed"
   ],
   "main": "things-d3-chart.html",
-  "license": "http://license.hatiolab.com/EULA",
-  "homepage": "http://elements.hatiolab.com/",
   "ignore": [
     "/.*",
     "/test/"
